@@ -10,6 +10,9 @@ function send(socket: WebSocket, msg: ServerMessage) {
 }
 
 wss.on("connection", (socket) => {
+  // Sessions created over this connection, so we can free them if it drops.
+  const owned = new Set<string>();
+
   socket.on("message", (data) => {
     let parsed: unknown;
     try {
@@ -26,6 +29,7 @@ wss.on("connection", (socket) => {
     switch (parsed.type) {
       case "create_session": {
         const session = sessions.create();
+        owned.add(session.sessionId);
         send(socket, { type: "session_created", sessionId: session.sessionId });
         break;
       }
@@ -52,6 +56,7 @@ wss.on("connection", (socket) => {
       }
       case "close_session": {
         sessions.remove(parsed.sessionId);
+        owned.delete(parsed.sessionId);
         // No reply and no socket close: the client asked to close, so it already knows.
         // We just free the server-side state. (Idempotent: remove() of an unknown id is a no-op.)
         break;
@@ -64,6 +69,9 @@ wss.on("connection", (socket) => {
   });
 
   socket.on("close", () => {
+    // Free any sessions this connection created but never closed, so they don't leak.
+    for (const sessionId of owned) sessions.remove(sessionId);
+    owned.clear();
     console.log("connection closed");
   });
 });
