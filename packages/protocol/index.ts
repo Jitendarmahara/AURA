@@ -1,15 +1,30 @@
+import { z } from "zod";
 
-export type ClientMessage =
-  | { type: "create_session" }
-  | { type: "offer"; sessionId: string; sdp: string }
-  | { type: "ice_candidate"; sessionId: string; candidate: string | null }
-  | { type: "close_session"; sessionId: string };
+export const IceCandidateInit = z.object({
+  candidate: z.string(),
+  sdpMid: z.string().nullable(),
+  sdpMLineIndex: z.number().nullable(),
+});
+export type IceCandidateInit = z.infer<typeof IceCandidateInit>;
 
-export type ServerMessage =
-  | { type: "session_created"; sessionId: string }
-  | { type: "answer"; sessionId: string; sdp: string }
-  | { type: "ice_candidate"; sessionId: string; candidate: string | null }
-  | { type: "error"; sessionId?: string; code: string; message: string };
+export const ClientMessage = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("create_session") }),
+  z.object({ type: z.literal("register_sfu") }),
+  z.object({ type: z.literal("offer"), sessionId: z.string(), sdp: z.string() }),
+  z.object({ type: z.literal("answer"), sessionId: z.string(), sdp: z.string() }),
+  z.object({ type: z.literal("ice_candidate"), sessionId: z.string(), candidate: IceCandidateInit.nullable() }),
+  z.object({ type: z.literal("close_session"), sessionId: z.string() }),
+]);
+export type ClientMessage = z.infer<typeof ClientMessage>;
+
+export const ServerMessage = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("session_created"), sessionId: z.string() }),
+  z.object({ type: z.literal("offer"), sessionId: z.string(), sdp: z.string() }),
+  z.object({ type: z.literal("answer"), sessionId: z.string(), sdp: z.string() }),
+  z.object({ type: z.literal("ice_candidate"), sessionId: z.string(), candidate: IceCandidateInit.nullable() }),
+  z.object({ type: z.literal("error"), sessionId: z.string().optional(), code: z.string(), message: z.string() }),
+]);
+export type ServerMessage = z.infer<typeof ServerMessage>;
 
 export type SessionState =
   | "new"
@@ -28,21 +43,5 @@ export type Session = {
 };
 
 export function isClientMessage(x: unknown): x is ClientMessage {
-  if (typeof x !== "object" || x === null) return false;
-  const m = x as Record<string, unknown>;
-  switch (m.type) {
-    case "create_session":
-      return true;
-    case "offer":
-      return typeof m.sessionId === "string" && typeof m.sdp === "string";
-    case "ice_candidate":
-      return (
-        typeof m.sessionId === "string" &&
-        (typeof m.candidate === "string" || m.candidate === null)
-      );
-    case "close_session":
-      return typeof m.sessionId === "string";
-    default:
-      return false;
-  }
+  return ClientMessage.safeParse(x).success;
 }

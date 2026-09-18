@@ -4,6 +4,8 @@ import { SessionManager } from "./session-manager";
 
 const wss = new WebSocketServer({ port: 8080 });
 const sessions = new SessionManager();
+let sfu: WebSocket | null = null;
+const browsers = new Map<string, WebSocket>();
 
 function send(socket: WebSocket, msg: ServerMessage) {
   socket.send(JSON.stringify(msg));
@@ -33,15 +35,35 @@ wss.on("connection", (socket) => {
         send(socket, { type: "session_created", sessionId: session.sessionId });
         break;
       }
+      case "register_sfu": {
+        sfu = socket;
+        console.log("sfu registered");
+        break;
+      }
       case "offer": {
         const session = sessions.get(parsed.sessionId);
         if (!session) {
           send(socket, { type: "error", sessionId: parsed.sessionId, code: "unknown_session", message: "no such session" });
           break;
         }
+        if (!sfu) {
+          send(socket, { type: "error", sessionId: parsed.sessionId, code: "no_sfu", message: "sfu not connected" });
+          break;
+        }
         session.offer = { sdp: parsed.sdp };
         session.state = "offered";
-        // (later) relay the offer to the SFU / peer, which produces the answer.
+        browsers.set(parsed.sessionId, socket); // remember who to send the answer back to
+        send(sfu, { type: "offer", sessionId: parsed.sessionId, sdp: parsed.sdp });
+        break;
+      }
+      case "answer": {
+        const session = sessions.get(parsed.sessionId);
+        if (session) {
+          session.answer = { sdp: parsed.sdp };
+          session.state = "answered";
+        }
+        const browser = browsers.get(parsed.sessionId);
+        if (browser) send(browser, { type: "answer", sessionId: parsed.sessionId, sdp: parsed.sdp });
         break;
       }
       case "ice_candidate": {
@@ -50,15 +72,15 @@ wss.on("connection", (socket) => {
           send(socket, { type: "error", sessionId: parsed.sessionId, code: "unknown_session", message: "no such session" });
           break;
         }
-        // (later) relay the candidate to the peer. For now, acceptance is enough.
-        console.log("ice candidate for", parsed.sessionId, parsed.candidate === null ? "(end)" : "");
+        // Relay to the other side: SFU's candidate -> browser, browser's -> SFU.
+        const target = socket === sfu ? browsers.get(parsed.sessionId) : sfu;
+        if (target) send(target, { type: "ice_candidate", sessionId: parsed.sessionId, candidate: parsed.candidate });
         break;
       }
       case "close_session": {
         sessions.remove(parsed.sessionId);
         owned.delete(parsed.sessionId);
-        // No reply and no socket close: the client asked to close, so it already knows.
-        // We just free the server-side state. (Idempotent: remove() of an unknown id is a no-op.)
+        browsers.delete(parsed.sessionId);
         break;
       }
       default: {
@@ -70,8 +92,12 @@ wss.on("connection", (socket) => {
 
   socket.on("close", () => {
     // Free any sessions this connection created but never closed, so they don't leak.
-    for (const sessionId of owned) sessions.remove(sessionId);
+    for (const sessionId of owned) {
+      sessions.remove(sessionId);
+      browsers.delete(sessionId);
+    }
     owned.clear();
+    if (socket === sfu) sfu = null; // SFU dropped; new offers will error until it reconnects
     console.log("connection closed");
   });
 });

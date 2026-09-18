@@ -1,11 +1,8 @@
 {
-  "name": "@aura/protocol",
+  "name": "sfu",
   "module": "index.ts",
   "type": "module",
   "private": true,
-  "exports": {
-    ".": "./index.ts"
-  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -13,6 +10,10 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "zod": "^4.6.5"
+    "@aura/protocol": "workspace:*",
+    "@types/ws": "^8.18.1",
+    "werift": "^0.24.4",
+    "ws": "^8.21.3"
   }
 }
+
