@@ -1,159 +1,97 @@
-# Turborepo starter
+# AURA
 
-This Turborepo starter is maintained by the Turborepo core team.
+A real-time, intent-driven voice agent. You talk to it in the browser; it understands, calls tools, keeps conversation state, and talks back — over a custom WebRTC SFU.
 
-## Using this example
+## Pipeline
 
-Run the following command:
-
-```sh
-npx create-turbo@latest
+```
+Browser (mic + speaker)
+  ⇄ WebRTC (audio both ways)
+Signaling (ws)  ── relays SDP/ICE only
+  ⇄
+SFU (werift)    ── custom, forwards RTP browser⇄agent
+  ⇄
+Agent
+  RTP → Opus decode → PCM (48k mono) → WebRTC VAD → TurnManager
+      → utterance buffer → STT (Groq Whisper)
+      → Orchestrator (conversation state + LLM tool-calling)
+          → tools (real state + ids) → results → replan
+      → TTS (Groq Orpheus) → Opus → RTP → SFU → Browser
 ```
 
-## What's inside?
+Design boundaries: transport (SFU/agent WebRTC) is separate from audio processing, which is separate from the orchestrator (`apps/agent/orchestrator/*`, zero transport imports), which is separate from tools. The LLM decides; the tool state (`BookingStore`) is the source of truth.
 
-This Turborepo includes the following packages/apps:
+## Run it
 
-### Apps and Packages
+1. Put your Groq key in `.env` at the repo root (see `.env.example`):
+   ```
+   GROQ_API_KEY=gsk_...
+   ```
+   Get a free key at https://console.groq.com. One key covers STT + LLM + TTS.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+2. Install and start everything (correct order, streamed logs):
+   ```
+   bun install
+   bun run aura
+   ```
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+3. Open http://localhost:3000, click **Connect & talk**, allow the mic, and speak.
 
-### Utilities
+### Enabling server-side voice (optional but recommended)
+The Orpheus TTS model is terms-gated. Accept once at
+https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english
+and AURA's voice streams back through the SFU as real audio. Until then, AURA
+still replies out loud using the browser's built-in voice (automatic fallback),
+while STT + LLM + tools all run server-side.
 
-This Turborepo has some additional tools already setup for you:
+## Frontend
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+`apps/client` is a single self-contained page: a status orb (idle / listening /
+thinking / speaking), a live mic-level meter, a conversation transcript, and
+connect/disconnect. It plays AURA's return audio from the SFU, and falls back to
+the browser's built-in voice if server TTS isn't enabled. It exposes
+`window.__AURA__` (connection/status/transcripts) so the end-to-end tests can
+drive and assert against it.
 
-### Build
+## Test
 
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```
+bun run test          # unit tests: state machine, orchestrator, runtime, dedupe (33 tests)
+bun run test:e2e      # real browser E2E with a fake mic (needs the stack running)
+bun run check-types   # web/docs typecheck (turbo)
 ```
 
-Without global `turbo`, use your package manager:
+`bun run test:e2e` launches headless Chrome with a WAV file fed as the
+microphone (`--use-file-for-fake-audio-capture`), clicks Connect, and asserts the
+whole pipeline through `window.__AURA__`: WebRTC connects both ways, STT
+transcribes, the LLM responds, tools run, and multi-turn book→cancel works — all
+from the browser. Start the stack first (`bun run aura`).
 
-```sh
-cd my-turborepo
-npx turbo build
-bun exec turbo build
-bun exec turbo build
-```
+> Note: the agent↔SFU peer connections are pinned away from unreachable Docker/
+> link-local interfaces via an ICE candidate filter, so WebRTC connects reliably
+> on machines with many virtual interfaces.
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Demo conversation
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+- "Book two tickets for Dune tomorrow at 8."
+- "Actually cancel that."
+- "Book a train from Delhi to Jaipur Friday morning at 6."
+- "Wait, change that to Saturday."   ← correction/replan
+- "What's the temperature in Delhi?" ← arbitrary question, weather tool
+- "What's 15 percent of 240?"        ← arbitrary question, no tool
+- Interrupt AURA while it's speaking  ← barge-in: it stops and listens
 
-```sh
-turbo build --filter=docs
-```
+## Tools (mock, with real state + ids)
 
-Without global `turbo`:
+`search_movies`, `book_movie_ticket`, `cancel_movie_ticket`, `search_trains`,
+`book_train`, `cancel_train_ticket`, `get_weather`. Bookings have explicit
+statuses (`confirmed → cancelled`, `confirmed → committed`) with guards against
+cancelling committed/already-cancelled bookings.
 
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
-```
+## Known limitations
 
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- Single active conversation (one shared agent PC); fine for a single-user demo.
+- Free-tier Groq is 8000 tokens/min; rapid-fire turns can pause a few seconds
+  (handled with rate-limit-aware retry). Natural pacing is fine.
+- Server TTS requires the one-time Orpheus terms acceptance above.
+- Turn detection is VAD + silence hangover, not a semantic end-of-turn model.

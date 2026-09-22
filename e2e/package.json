@@ -1,0 +1,13 @@
+{
+  "name": "e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fixtures": "bun run make-fixtures.ts",
+    "test": "bun run make-fixtures.ts && bun test browser.test.ts"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.0.0",
+    "@types/bun": "latest"
+  }
+}

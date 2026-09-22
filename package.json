@@ -2,6 +2,9 @@
   "name": "AURA",
   "private": true,
   "scripts": {
+    "aura": "bun run scripts/dev.ts",
+    "test": "bun test apps/agent packages/protocol apps/signaling",
+    "test:e2e": "cd e2e && bun run test",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",

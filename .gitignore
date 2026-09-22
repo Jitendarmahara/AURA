@@ -36,3 +36,6 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+chrome/
+e2e/node_modules/
+*.wav

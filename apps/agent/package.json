@@ -1,0 +1,19 @@
+{
+  "name": "agent",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@echogarden/fvad-wasm": "^0.2.0",
+    "@evan/opus": "^1.0.3",
+    "@types/ws": "^8.18.1",
+    "werift": "^0.24.4",
+    "ws": "^8.21.3"
+  }
+}

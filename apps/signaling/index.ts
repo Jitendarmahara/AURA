@@ -5,6 +5,7 @@ import { SessionManager } from "./session-manager";
 const wss = new WebSocketServer({ port: 8080 });
 const sessions = new SessionManager();
 let sfu: WebSocket | null = null;
+let agent: WebSocket | null = null;
 const browsers = new Map<string, WebSocket>();
 
 function send(socket: WebSocket, msg: ServerMessage) {
@@ -38,6 +39,26 @@ wss.on("connection", (socket) => {
       case "register_sfu": {
         sfu = socket;
         console.log("sfu registered");
+        if (agent) send(sfu, { type: "agent_available" });
+        break;
+      }
+      case "register_agent": {
+        agent = socket;
+        console.log("agent registered");
+        if (sfu) send(sfu, { type: "agent_available" });
+        break;
+      }
+      case "agent_offer": {
+        if (agent) send(agent, { type: "agent_offer", sdp: parsed.sdp });
+        break;
+      }
+      case "agent_answer": {
+        if (sfu) send(sfu, { type: "agent_answer", sdp: parsed.sdp });
+        break;
+      }
+      case "agent_ice": {
+        const target = socket === sfu ? agent : sfu;
+        if (target) send(target, { type: "agent_ice", candidate: parsed.candidate });
         break;
       }
       case "offer": {
@@ -83,6 +104,14 @@ wss.on("connection", (socket) => {
         browsers.delete(parsed.sessionId);
         break;
       }
+      case "aura_event": {
+        for (const browser of browsers.values()) send(browser, { type: "aura_event", event: parsed.event });
+        break;
+      }
+      case "session_reset": {
+        if (agent) send(agent, { type: "session_reset" });
+        break;
+      }
       default: {
         const _exhaustive: never = parsed;
         return _exhaustive;
@@ -98,6 +127,7 @@ wss.on("connection", (socket) => {
     }
     owned.clear();
     if (socket === sfu) sfu = null; // SFU dropped; new offers will error until it reconnects
+    if (socket === agent) agent = null;
     console.log("connection closed");
   });
 });

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AURA</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0c11;
+      --panel: #121620;
+      --panel-2: #171c28;
+      --border: #232a3a;
+      --text: #e8ebf2;
+      --muted: #8b93a7;
+      --accent: #3b82f6;
+      --user: #1f4b8f;
+      --idle: #4b5366;
+      --listening: #22c55e;
+      --thinking: #eab308;
+      --speaking: #3b82f6;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(1200px 700px at 50% -10%, #141a2b 0%, var(--bg) 55%);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+    }
+    header {
+      padding: 20px 20px 8px;
+      text-align: center;
+    }
+    .brand {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      background: linear-gradient(90deg, #7aa2ff, #a78bfa);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .tagline { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 12px 16px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .stage {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 26px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .orb-wrap { position: relative; width: 132px; height: 132px; display: grid; place-items: center; }
+    .ring {
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 2px solid transparent; transition: opacity .2s;
+      opacity: 0;
+    }
+    .ring.active { opacity: 1; animation: spin 3s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .orb {
+      width: 96px; height: 96px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #384258, #202636);
+      display: grid; place-items: center;
+      transition: box-shadow .25s, transform .25s;
+      box-shadow: 0 0 0 0 rgba(75,83,102,.0);
+    }
+    .orb .core { width: 26px; height: 26px; border-radius: 50%; background: var(--idle); transition: background .25s, transform .25s; }
+    .orb.idle .core { background: var(--idle); }
+    .orb.listening { box-shadow: 0 0 40px 6px rgba(34,197,94,.35); }
+    .orb.listening .core { background: var(--listening); }
+    .orb.thinking { box-shadow: 0 0 40px 6px rgba(234,179,8,.30); }
+    .orb.thinking .core { background: var(--thinking); animation: pulse 1s ease-in-out infinite; }
+    .orb.speaking { box-shadow: 0 0 44px 8px rgba(59,130,246,.40); }
+    .orb.speaking .core { background: var(--speaking); animation: pulse .55s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.5); } }
+
+    .status-label { font-size: 15px; color: var(--muted); min-height: 20px; letter-spacing: .3px; }
+    .status-label b { color: var(--text); font-weight: 600; }
+
+    .meter { width: 180px; height: 6px; border-radius: 999px; background: #0e1220; overflow: hidden; border: 1px solid var(--border); }
+    .meter > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #eab308, #ef4444); transition: width .08s linear; }
+
+    button {
+      font: inherit; font-weight: 700; letter-spacing: .3px;
+      padding: 12px 26px; border-radius: 12px; border: none; cursor: pointer;
+      background: var(--accent); color: #fff; transition: filter .15s, background .2s;
+    }
+    button:hover { filter: brightness(1.08); }
+    button.on { background: var(--danger); }
+    button:disabled { opacity: .5; cursor: default; }
+
+    .convo {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      min-height: 160px;
+      max-height: 46vh; overflow-y: auto;
+    }
+    .empty { color: var(--muted); font-size: 14px; text-align: center; margin: auto; }
+    .msg { padding: 10px 14px; border-radius: 14px; max-width: 82%; font-size: 15px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+    .msg.user { align-self: flex-end; background: var(--user); border-bottom-right-radius: 4px; }
+    .msg.aura { align-self: flex-start; background: #1b2233; border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .msg .who { display: block; font-size: 11px; opacity: .7; margin-bottom: 2px; letter-spacing: .5px; text-transform: uppercase; }
+
+    .toast { color: var(--danger); font-size: 13px; min-height: 18px; text-align: center; }
+    .hints { color: var(--muted); font-size: 12.5px; text-align: center; line-height: 1.7; }
+    .hints code { background: #0e1220; border: 1px solid var(--border); padding: 2px 7px; border-radius: 6px; color: #cbd5e1; }
+    footer { text-align: center; color: #566; font-size: 11px; padding: 8px 0 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">A U R A</div>
+    <div class="tagline">real-time voice agent · custom WebRTC SFU · Groq STT · LLM · TTS</div>
+  </header>
+
+  <main>
+    <section class="stage">
+      <div class="orb-wrap">
+        <div class="ring" id="ring"></div>
+        <div class="orb idle" id="orb"><div class="core"></div></div>
+      </div>
+      <div class="status-label" id="statusLabel">Disconnected</div>
+      <div class="meter"><i id="meterFill"></i></div>
+      <button id="connect">Connect &amp; talk</button>
+    </section>
+
+    <section class="convo" id="convo">
+      <div class="empty" id="empty">Your conversation will appear here.</div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+    <div class="hints">
+      Try: <code>Book two tickets for Dune tomorrow at 8</code> · <code>Actually cancel that</code><br />
+      <code>Book a train from Delhi to Jaipur Friday morning</code> · <code>What's the temperature in Delhi?</code>
+    </div>
+  </main>
+
+  <footer>Speak, then pause. Interrupt any time — AURA will stop and listen.</footer>
+
+  <audio id="aura" autoplay></audio>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const orb = $("orb"), ring = $("ring"), statusLabel = $("statusLabel");
+    const convo = $("convo"), empty = $("empty"), toast = $("toast");
+    const btn = $("connect"), auraAudio = $("aura"), meterFill = $("meterFill");
+
+    const LABELS = {
+      disconnected: "Disconnected",
+      connecting: "Connecting…",
+      idle: "<b>Ready</b> — start talking",
+      listening: "<b>Listening…</b>",
+      thinking: "<b>Thinking…</b>",
+      speaking: "<b>Speaking…</b>",
+    };
+
+    const state = { connected: false, pc: null, ws: null, audioCtx: null, raf: 0 };
+    window.__AURA__ = { connected: false, status: "disconnected", user: [], aura: [], errors: [], gotRemoteAudio: false };
+
+    function setStatus(s) {
+      window.__AURA__.status = s;
+      statusLabel.innerHTML = LABELS[s] || s;
+      if (["listening", "thinking", "speaking"].includes(s)) {
+        orb.className = "orb " + s;
+        ring.className = "ring active";
+        ring.style.borderTopColor = getComputedStyle(document.documentElement).getPropertyValue("--" + s).trim() || "#3b82f6";
+      } else {
+        orb.className = "orb idle";
+        ring.className = "ring";
+      }
+    }
+
+    function addMsg(who, text) {
+      empty.style.display = "none";
+      const el = document.createElement("div");
+      el.className = "msg " + who;
+      el.innerHTML = `<span class="who">${who === "user" ? "You" : "AURA"}</span>`;
+      el.appendChild(document.createTextNode(text));
+      convo.appendChild(el);
+      convo.scrollTop = convo.scrollHeight;
+    }
+
+    function showError(msg) { toast.textContent = msg; window.__AURA__.errors.push(msg); }
+
+    function speakInBrowser(text) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.05;
+      setStatus("speaking");
+      u.onend = () => setStatus("idle");
+      window.speechSynthesis.speak(u);
+    }
+
+    function startMeter(stream) {
+      try {
+        state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = state.audioCtx.createMediaStreamSource(stream);
+        const analyser = state.audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        src.connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        const tick = () => {
+          analyser.getByteTimeDomainData(data);
+          let peak = 0;
+          for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i] - 128));
+          meterFill.style.width = Math.min(100, (peak / 128) * 180) + "%";
+          state.raf = requestAnimationFrame(tick);
+        };
+        tick();
+      } catch {}
+    }
+
+    async function connect() {
+      toast.textContent = "";
+      setStatus("connecting");
+      btn.disabled = true;
+      let sessionId = "";
+      const pendingCandidates = [];
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      state.pc = pc;
+
+      pc.ontrack = (e) => {
+        window.__AURA__.gotRemoteAudio = true;
+        auraAudio.srcObject = e.streams[0] || new MediaStream([e.track]);
+        auraAudio.play().catch(() => {});
+      };
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      } catch (err) {
+        showError("Microphone access denied.");
+        setStatus("disconnected"); btn.disabled = false;
+        return;
+      }
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      startMeter(stream);
+      state.micStream = stream;
+
+      const ws = new WebSocket("ws://" + location.hostname + ":8080");
+      state.ws = ws;
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "connected") { window.__AURA__.connected = true; setStatus("idle"); }
+        if (pc.connectionState === "failed") showError("Connection failed.");
+      };
+      pc.onicecandidate = (e) => {
+        if (!e.candidate || !sessionId) return;
+        const j = e.candidate.toJSON();
+        ws.send(JSON.stringify({ type: "ice_candidate", sessionId, candidate: { candidate: j.candidate, sdpMid: j.sdpMid ?? null, sdpMLineIndex: j.sdpMLineIndex ?? null } }));
+      };
+
+      ws.onopen = () => ws.send(JSON.stringify({ type: "create_session" }));
+      ws.onerror = () => showError("Signaling connection error.");
+      ws.onmessage = async (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === "session_created") {
+          sessionId = msg.sessionId;
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          ws.send(JSON.stringify({ type: "offer", sessionId, sdp: offer.sdp }));
+        } else if (msg.type === "answer") {
+          await pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+          for (const c of pendingCandidates.splice(0)) await pc.addIceCandidate(c).catch(() => {});
+        } else if (msg.type === "ice_candidate" && msg.candidate) {
+          if (pc.remoteDescription) await pc.addIceCandidate(msg.candidate).catch(() => {});
+          else pendingCandidates.push(msg.candidate);
+        } else if (msg.type === "aura_event") {
+          const e = msg.event;
+          if (e.kind === "status") {
+            setStatus(e.status);
+            if (e.status === "listening" && window.speechSynthesis) window.speechSynthesis.cancel();
+          } else if (e.kind === "user_transcript") { addMsg("user", e.text); window.__AURA__.user.push(e.text); }
+          else if (e.kind === "aura_text") { addMsg("aura", e.text); window.__AURA__.aura.push(e.text); }
+          else if (e.kind === "speak") speakInBrowser(e.text);
+          else if (e.kind === "error") showError(e.message);
+        }
+      };
+
+      state.connected = true;
+      btn.disabled = false;
+      btn.textContent = "Disconnect";
+      btn.classList.add("on");
+    }
+
+    function disconnect() {
+      try { state.ws && state.ws.close(); } catch {}
+      try { state.micStream && state.micStream.getTracks().forEach((t) => t.stop()); } catch {}
+      try { state.pc && state.pc.close(); } catch {}
+      try { state.audioCtx && state.audioCtx.close(); } catch {}
+      if (state.raf) cancelAnimationFrame(state.raf);
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      meterFill.style.width = "0%";
+      state.connected = false;
+      window.__AURA__.connected = false;
+      btn.textContent = "Connect & talk";
+      btn.classList.remove("on");
+      setStatus("disconnected");
+    }
+
+    btn.onclick = () => (state.connected ? disconnect() : connect().catch((e) => { showError(String(e)); disconnect(); }));
+  </script>
+</body>
+</html>
